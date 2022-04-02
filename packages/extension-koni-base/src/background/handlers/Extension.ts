@@ -2,9 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Extension, { SEED_DEFAULT_LENGTH, SEED_LENGTHS } from '@polkadot/extension-base/background/handlers/Extension';
+import { AuthUrls } from '@polkadot/extension-base/background/handlers/State';
 import { createSubscription, unsubscribe } from '@polkadot/extension-base/background/handlers/subscriptions';
 import { AccountsWithCurrentAddress, ApiInitStatus, BackgroundWindow, BalanceJson, ChainRegistry, CrowdloanJson, NetWorkMetadataDef, NftCollection, NftCollectionJson, NftItem, NftJson, NftTransferExtra, PriceJson, RequestAccountCreateSuriV2, RequestAccountExportPrivateKey, RequestApi, RequestCheckTransfer, RequestNftForceUpdate, RequestSeedCreateV2, RequestSeedValidateV2, RequestTransactionHistoryAdd, RequestTransfer, ResponseAccountCreateSuriV2, ResponseAccountExportPrivateKey, ResponseCheckTransfer, ResponseSeedCreateV2, ResponseSeedValidateV2, StakingJson, StakingRewardJson, TransactionHistoryItemType, TransferError, TransferErrorCode, TransferStep } from '@polkadot/extension-base/background/KoniTypes';
-import { AccountJson, MessageTypes, RequestAccountCreateSuri, RequestAccountForget, RequestBatchRestore, RequestCurrentAccountAddress, RequestDeriveCreate, RequestJsonRestore, RequestTypes, ResponseType } from '@polkadot/extension-base/background/types';
+import {
+  AccountJson,
+  AuthorizeRequest,
+  MessageTypes,
+  RequestAccountCreateSuri,
+  RequestAccountForget, RequestAuthorizeApprove, RequestAuthorizeReject,
+  RequestBatchRestore,
+  RequestCurrentAccountAddress,
+  RequestDeriveCreate,
+  RequestJsonRestore,
+  RequestTypes,
+  ResponseAuthorizeList,
+  ResponseType
+} from '@polkadot/extension-base/background/types';
 import { initApi } from '@polkadot/extension-koni-base/api/dotsama';
 import { getFreeBalance } from '@polkadot/extension-koni-base/api/dotsama/balance';
 import { estimateFee, makeTransfer } from '@polkadot/extension-koni-base/api/dotsama/transfer';
@@ -109,6 +123,58 @@ export default class KoniExtension extends Extension {
     const accountsSubject = accountsObservable.subject;
 
     accountsSubject.next(accountsSubject.getValue());
+
+    return true;
+  }
+
+  private _getAuthListV2 (): Promise<AuthUrls> {
+    return new Promise<AuthUrls>((resolve, reject) => {
+      state.getAuthorize((rs: AuthUrls) => {
+        resolve(rs);
+      });
+    });
+  }
+
+  private authorizeSubscribeV2 (id: string, port: chrome.runtime.Port): boolean {
+    const cb = createSubscription<'pri(authorize.requestsV2)'>(id, port);
+    const subscription = state.authSubjectV2.subscribe((requests: AuthorizeRequest[]): void =>
+      cb(requests)
+    );
+
+    port.onDisconnect.addListener((): void => {
+      unsubscribe(id);
+      subscription.unsubscribe();
+    });
+
+    return true;
+  }
+
+  private async getAuthListV2 (): Promise<ResponseAuthorizeList> {
+    const authList = await this._getAuthListV2();
+
+    return { list: authList };
+  }
+
+  private authorizeApproveV2 ({ id }: RequestAuthorizeApprove): boolean {
+    const queued = state.getAuthRequestV2(id);
+
+    assert(queued, 'Unable to find request');
+
+    const { resolve } = queued;
+
+    resolve(true);
+
+    return true;
+  }
+
+  private authorizeRejectV2 ({ id }: RequestAuthorizeReject): boolean {
+    const queued = state.getAuthRequestV2(id);
+
+    assert(queued, 'Unable to find request');
+
+    const { reject } = queued;
+
+    reject(new Error('Rejected'));
 
     return true;
   }
@@ -805,6 +871,14 @@ export default class KoniExtension extends Extension {
     switch (type) {
       case 'pri(api.init)':
         return this.apiInit(request as RequestApi);
+      case 'pri(authorize.approveV2)':
+        return this.authorizeApproveV2(request as RequestAuthorizeApprove);
+      case 'pri(authorize.rejectV2)':
+        return this.authorizeRejectV2(request as RequestAuthorizeReject);
+      case 'pri(authorize.requests)':
+        return this.authorizeSubscribeV2(id, port);
+      case 'pri(authorize.listV2)':
+        return this.getAuthListV2();
       case 'pri(accounts.create.suriV2)':
         return await this.accountsCreateSuriV2(request as RequestAccountCreateSuri);
       case 'pri(accounts.forget)':

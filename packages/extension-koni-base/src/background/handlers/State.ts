@@ -1,10 +1,13 @@
 // Copyright 2019-2022 @polkadot/extension-koni authors & contributors
 // SPDX-License-Identifier: Apache-2.0
 
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 
-import State from '@polkadot/extension-base/background/handlers/State';
+import { withErrorLog } from '@polkadot/extension-base/background/handlers/helpers';
+import State, { AuthRequest, AuthUrls, Resolver } from '@polkadot/extension-base/background/handlers/State';
 import { AccountRefMap, APIItemState, BalanceItem, BalanceJson, ChainRegistry, CrowdloanItem, CrowdloanJson, CurrentAccountInfo, NftCollection, NftCollectionJson, NftItem, NftJson, NftTransferExtra, PriceJson, StakingItem, StakingJson, StakingRewardJson, TransactionHistoryItemType } from '@polkadot/extension-base/background/KoniTypes';
+import { AuthorizeRequest, RequestAuthorizeTab } from '@polkadot/extension-base/background/types';
+import { getId } from '@polkadot/extension-base/utils/getId';
 import { getTokenPrice } from '@polkadot/extension-koni-base/api/coingecko';
 import NETWORKS from '@polkadot/extension-koni-base/api/endpoints';
 import { DEFAULT_STAKING_NETWORKS } from '@polkadot/extension-koni-base/api/staking';
@@ -13,8 +16,10 @@ import { DotSamaCrowdloan_crowdloans_nodes } from '@polkadot/extension-koni-base
 import { fetchDotSamaCrowdloan } from '@polkadot/extension-koni-base/api/subquery/crowdloan';
 import { CurrentAccountStore, PriceStore } from '@polkadot/extension-koni-base/stores';
 import AccountRefStore from '@polkadot/extension-koni-base/stores/AccountRef';
+import AuthorizeStore from '@polkadot/extension-koni-base/stores/Authorize';
 import TransactionHistoryStore from '@polkadot/extension-koni-base/stores/TransactionHistory';
 import { convertFundStatus } from '@polkadot/extension-koni-base/utils/utils';
+import { assert } from '@polkadot/util';
 
 function generateDefaultBalanceMap () {
   const balanceMap: Record<string, BalanceItem> = {};
@@ -61,9 +66,13 @@ function generateDefaultCrowdloanMap () {
 }
 
 export default class KoniState extends State {
+  public readonly authSubjectV2: BehaviorSubject<AuthorizeRequest[]> = new BehaviorSubject<AuthorizeRequest[]>([]);
+
   private readonly priceStore = new PriceStore();
   private readonly currentAccountStore = new CurrentAccountStore();
   private readonly accountRefStore = new AccountRefStore();
+  private readonly authorizeStore = new AuthorizeStore();
+  readonly #authRequestsV2: Record<string, AuthRequest> = {};
   // private readonly nftStore = new NftStore();
   // private readonly stakingStore = new StakingStore();
   private priceStoreReady = false;
@@ -128,6 +137,135 @@ export default class KoniState extends State {
 
     this.lazyMap[key] = lazy;
   };
+
+  public getAuthRequestV2 (id: string): AuthRequest {
+    return this.#authRequestsV2[id];
+  }
+
+  public get numAuthRequestsV2 (): number {
+    return Object.keys(this.#authRequestsV2).length;
+  }
+
+  public get allAuthRequestsV2 (): AuthorizeRequest[] {
+    return Object
+      .values(this.#authRequestsV2)
+      .map(({ id, request, url }): AuthorizeRequest => ({ id, request, url }));
+  }
+
+  public setAuthorize (data: AuthUrls, callback?: () => void): void {
+    this.authorizeStore.set('authUrls', data, callback);
+  }
+
+  public getAuthorize (update: (value: AuthUrls) => void): void {
+    this.authorizeStore.get('authUrls', update);
+  }
+
+  private updateIconV2 (shouldClose?: boolean): void {
+    const authCount = this.numAuthRequestsV2;
+    const text = (
+      authCount
+        ? 'Auth'
+        : ''
+    );
+
+    withErrorLog(() => chrome.browserAction.setBadgeText({ text }));
+
+    if (shouldClose && text === '') {
+      this.popupClose();
+    }
+  }
+
+  private getAuthList (): Promise<AuthUrls> {
+    return new Promise<AuthUrls>((resolve, reject) => {
+      this.getAuthorize((rs: AuthUrls) => {
+        resolve(rs);
+      });
+    });
+  }
+
+  private updateIconAuthV2 (shouldClose?: boolean): void {
+    this.authSubjectV2.next(this.allAuthRequestsV2);
+    this.updateIconV2(shouldClose);
+  }
+
+  private authCompleteV2 = (id: string, resolve: (result: boolean) => void, reject: (error: Error) => void): Resolver<boolean> => {
+    console.log('this.#authRequestsV2', this.#authRequestsV2);
+
+    const complete = (result: boolean | Error) => {
+      const isAllowed = result === true;
+      const { idStr, request: { origin }, url } = this.#authRequestsV2[id];
+
+      this.getAuthorize((value) => {
+        let authorizeList = {} as AuthUrls;
+
+        if (value) {
+          authorizeList = value;
+        }
+
+        console.log('authorizeList', authorizeList);
+        authorizeList[this.stripUrl(url)] = {
+          count: 0,
+          id: idStr,
+          isAllowed,
+          origin,
+          url
+        };
+
+        console.log('authorizeList', authorizeList);
+        this.setAuthorize(authorizeList);
+        delete this.#authRequestsV2[id];
+        this.updateIconAuthV2(true);
+      });
+    };
+
+    return {
+      reject: (error: Error): void => {
+        complete(error);
+        reject(error);
+      },
+      resolve: (result: boolean): void => {
+        complete(result);
+        resolve(result);
+      }
+    };
+  };
+
+  public async authorizeUrlV2 (url: string, request: RequestAuthorizeTab): Promise<boolean> {
+    const idStr = this.stripUrl(url);
+    // Do not enqueue duplicate authorization requests.
+    const isDuplicate = Object.values(this.#authRequestsV2)
+      .some((request) => request.idStr === idStr);
+
+    assert(!isDuplicate, `The source ${url} has a pending authorization request`);
+
+    let authList = await this.getAuthList();
+
+    if (!authList) {
+      authList = {};
+    }
+
+    if (authList[idStr]) {
+      // this url was seen in the past
+      assert(authList[idStr].isAllowed, `The source ${url} is not allowed to interact with this extension`);
+
+      return false;
+    }
+
+    return new Promise((resolve, reject): void => {
+      const id = getId();
+
+      this.#authRequestsV2[id] = {
+        ...this.authCompleteV2(id, resolve, reject),
+        id,
+        idStr,
+        request,
+        url
+      };
+
+      this.updateIconAuthV2();
+      this.popupOpen();
+    });
+  }
 
   public getStaking (): StakingJson {
     return { ready: true, details: this.stakingMap } as StakingJson;

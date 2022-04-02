@@ -10,7 +10,7 @@ import styled from 'styled-components';
 // import ConnectAccount from '@polkadot/extension-koni-ui/Popup/Authorize/ConnectAccount';
 import { ActionContext, Button } from '../../components';
 import useTranslation from '../../hooks/useTranslation';
-import { approveAuthRequest, rejectAuthRequest } from '../../messaging';
+import { approveAuthRequestV2, rejectAuthRequestV2 } from '../../messaging';
 
 interface Props extends ThemeProps {
   authId: string;
@@ -28,14 +28,14 @@ function Request ({ authId, className, request: { origin }, url }: Props): React
   const { hostname } = new URL(url);
 
   const _onApprove = useCallback(
-    () => approveAuthRequest(authId)
+    () => approveAuthRequestV2(authId)
       .then(() => onAction())
       .catch((error: Error) => console.error(error)),
     [authId, onAction]
   );
 
   const _onReject = useCallback(
-    () => rejectAuthRequest(authId)
+    () => rejectAuthRequestV2(authId)
       .then(() => onAction())
       .catch((error: Error) => console.error(error)),
     [authId, onAction]

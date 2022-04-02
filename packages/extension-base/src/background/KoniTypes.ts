@@ -3,7 +3,16 @@
 
 import { ApiPromise } from '@polkadot/api';
 import { SubmittableExtrinsicFunction } from '@polkadot/api/promise/types';
-import { AccountJson, RequestAccountSubscribe, RequestBatchRestore, RequestCurrentAccountAddress, RequestDeriveCreate, RequestJsonRestore, SeedLengths } from '@polkadot/extension-base/background/types';
+import {
+  AccountJson, AuthorizeRequest,
+  RequestAccountSubscribe, RequestAuthorizeApprove, RequestAuthorizeReject, RequestAuthorizeSubscribe,
+  RequestBatchRestore,
+  RequestCurrentAccountAddress,
+  RequestDeriveCreate,
+  RequestJsonRestore,
+  ResponseAuthorizeList,
+  SeedLengths
+} from '@polkadot/extension-base/background/types';
 import { MetadataDefBase } from '@polkadot/extension-inject/types';
 import { Registry } from '@polkadot/types/types';
 import { Keyring } from '@polkadot/ui-keyring';
@@ -411,6 +420,10 @@ export interface KoniRequestSignatures {
   'pri(balance.getSubscription)': [RequestSubscribeBalance, BalanceJson, BalanceJson];
   'pri(crowdloan.getCrowdloan)': [RequestCrowdloan, CrowdloanJson];
   'pri(crowdloan.getSubscription)': [RequestSubscribeCrowdloan, CrowdloanJson, CrowdloanJson];
+  'pri(authorize.listV2)': [null, ResponseAuthorizeList];
+  'pri(authorize.requestsV2)': [RequestAuthorizeSubscribe, boolean, AuthorizeRequest[]];
+  'pri(authorize.approveV2)': [RequestAuthorizeApprove, boolean];
+  'pri(authorize.rejectV2)': [RequestAuthorizeReject, boolean];
   'pri(seed.createV2)': [RequestSeedCreateV2, ResponseSeedCreateV2];
   'pri(seed.validateV2)': [RequestSeedValidateV2, ResponseSeedValidateV2];
   'pri(accounts.create.suriV2)': [RequestAccountCreateSuriV2, ResponseAccountCreateSuriV2];

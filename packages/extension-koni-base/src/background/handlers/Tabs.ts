@@ -3,10 +3,21 @@
 
 import Tabs from '@polkadot/extension-base/background/handlers/Tabs';
 import { RandomTestRequest } from '@polkadot/extension-base/background/KoniTypes';
-import { MessageTypes, RequestTypes, ResponseTypes } from '@polkadot/extension-base/background/types';
-import { state } from '@polkadot/extension-koni-base/background/handlers/index';
+import { MessageTypes, RequestAuthorizeTab, RequestTypes, ResponseTypes } from '@polkadot/extension-base/background/types';
+import KoniState from '@polkadot/extension-koni-base/background/handlers/State';
 
 export default class KoniTabs extends Tabs {
+  readonly #koniState: KoniState;
+
+  constructor (koniState: KoniState) {
+    super(koniState);
+    this.#koniState = koniState;
+  }
+
+  private authorizeV2 (url: string, request: RequestAuthorizeTab): Promise<boolean> {
+    return this.#koniState.authorizeUrlV2(url, request);
+  }
+
   private static getRandom ({ end, start }: RandomTestRequest): number {
     return Math.floor(Math.random() * (end - start + 1) + start);
   }
@@ -16,11 +27,13 @@ export default class KoniTabs extends Tabs {
       return this.redirectIfPhishing(url);
     }
 
-    if (type !== 'pub(authorize.tab)') {
-      state.ensureUrlAuthorized(url);
+    if (type !== 'pub(authorize.tabV2)') {
+      this.#koniState.ensureUrlAuthorized(url);
     }
 
     switch (type) {
+      case 'pub(authorize.tabV2)':
+        return this.authorizeV2(url, request as RequestAuthorizeTab);
       case 'pub:utils.getRandom':
         return KoniTabs.getRandom(request as RandomTestRequest);
       default:

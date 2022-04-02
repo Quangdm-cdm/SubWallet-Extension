@@ -109,6 +109,10 @@ export async function approveAuthRequest (id: string): Promise<boolean> {
   return sendMessage('pri(authorize.approve)', { id });
 }
 
+export async function approveAuthRequestV2 (id: string): Promise<boolean> {
+  return sendMessage('pri(authorize.approveV2)', { id });
+}
+
 export async function approveMetaRequest (id: string): Promise<boolean> {
   return sendMessage('pri(metadata.approve)', { id });
 }
@@ -194,6 +198,10 @@ export async function rejectAuthRequest (id: string): Promise<boolean> {
   return sendMessage('pri(authorize.reject)', { id });
 }
 
+export async function rejectAuthRequestV2 (id: string): Promise<boolean> {
+  return sendMessage('pri(authorize.rejectV2)', { id });
+}
+
 export async function rejectMetaRequest (id: string): Promise<boolean> {
   return sendMessage('pri(metadata.reject)', { id });
 }
@@ -214,8 +222,16 @@ export async function subscribeAuthorizeRequests (cb: (accounts: AuthorizeReques
   return sendMessage('pri(authorize.requests)', null, cb);
 }
 
+export async function subscribeAuthorizeRequestsV2 (cb: (accounts: AuthorizeRequest[]) => void): Promise<boolean> {
+  return sendMessage('pri(authorize.requestsV2)', null, cb);
+}
+
 export async function getAuthList (): Promise<ResponseAuthorizeList> {
   return sendMessage('pri(authorize.list)');
+}
+
+export async function getAuthListV2 (): Promise<ResponseAuthorizeList> {
+  return sendMessage('pri(authorize.listV2)');
 }
 
 export async function toggleAuthorization (url: string): Promise<ResponseAuthorizeList> {
