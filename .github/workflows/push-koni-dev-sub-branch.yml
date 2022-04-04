@@ -1,4 +1,4 @@
-name: Koni Dev
+name: Koni Common For Sub Branch
 on:
   push:
     branches:

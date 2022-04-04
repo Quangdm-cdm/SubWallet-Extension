@@ -10,6 +10,7 @@ module.exports = {
     "i18next-scanner.config.js",
     "koni-ci-ghact-build.mjs",
     "koni-ci-build-dev.mjs",
+    "koni-ci-run-common.mjs",
     "packages/extension/*",
     "packages/extension-ui/*"
   ],
