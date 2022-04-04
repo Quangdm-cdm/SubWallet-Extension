@@ -15,6 +15,7 @@
     "packages/*"
   ],
   "bin": {
+    "koni-ci-build-common": "./scripts/koni-ci-run-common.mjs",
     "koni-ci-build-dev": "./scripts/koni-ci-build-dev.mjs",
     "koni-ci-ghact-build": "./scripts/koni-ci-ghact-build.mjs"
   },
@@ -22,6 +23,7 @@
     "build": "polkadot-dev-build-ts && yarn build:zip && yarn build:rollup",
     "build:extra": "yarn build:i18n && yarn build:ui",
     "build:i18n": "i18next-scanner --config i18next-scanner.config.js",
+    "build:koni-common": "koni-ci-build-common",
     "build:koni-dev": "koni-ci-build-dev",
     "build:release": "koni-ci-ghact-build",
     "build:rollup": "polkadot-exec-rollup --config",
